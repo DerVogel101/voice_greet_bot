@@ -1,8 +1,9 @@
 .dart_tool/
 pubspec.lock
 
-.data/*
-!.data/.gitkeep
+data/*
+!data/.gitkeep
+!data/sounds
 
-.data/sounds/*
-!.data/sounds/.gitkeep
+data/sounds/*
+!data/sounds/.gitkeep
