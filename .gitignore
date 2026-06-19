@@ -4,6 +4,10 @@ pubspec.lock
 data/*
 !data/.gitkeep
 !data/sounds
+!data/lava
 
 data/sounds/*
 !data/sounds/.gitkeep
+
+data/lava/*
+!data/lava/.gitkeep
