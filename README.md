@@ -1,39 +1,42 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# Voice Greet Bot
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+Stage one is a Discord bot with a guild-only `/test` slash command. Running
+`/test` sends `test` in the same channel.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/tools/pub/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+## Discord setup
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+Invite the bot with these OAuth2 scopes:
 
-## Features
+- `bot`
+- `applications.commands`
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+The command is registered only in guilds listed in `data/servers.json`, so
+updates should appear quickly while testing.
 
-## Getting started
+## Configuration
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+Set the bot token in PowerShell:
 
-## Usage
-
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
-
-```dart
-const like = 'sample';
+```powershell
+$env:DISCORD_TOKEN = 'your-bot-token'
 ```
 
-## Additional information
+Add one or more guild IDs to `data/servers.json`:
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+```json
+["123456789012345678"]
+```
+
+The file must be a non-empty JSON array of Discord guild ID strings or integers.
+
+## Run
+
+From the project root:
+
+```powershell
+dart pub get
+dart run
+```
+
+If `DISCORD_TOKEN` or `data/servers.json` is missing or invalid, startup fails
+with a clear error.
