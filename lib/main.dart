@@ -38,7 +38,15 @@ Future<void> main() async {
   final greetingConfigStore = GreetingConfigStore(_usersConfigPath);
   final channelConfigStore = ChannelConfigStore(_channelsConfigPath);
   final playbackStartDelay = _playbackStartDelayFromEnvironment();
-  final lavalinkConfig = LavalinkProcessConfig.fromEnvironment();
+  final LavalinkProcessConfig lavalinkConfig;
+  try {
+    lavalinkConfig = LavalinkProcessConfig.fromEnvironment();
+  } on LavalinkProcessException catch (error) {
+    stderr.writeln(error.message);
+    exitCode = 64;
+    return;
+  }
+
   final lavalinkProcess = LavalinkProcessManager(lavalinkConfig);
   final lavalink = LavalinkPlugin(
     base: lavalinkConfig.base,

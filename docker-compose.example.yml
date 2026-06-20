@@ -1,0 +1,33 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - lavalink
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN:-}
+      VOICE_GREETING_START_DELAY_MS: ${VOICE_GREETING_START_DELAY_MS:-500}
+      LAVALINK_AUTO_START: ${LAVALINK_AUTO_START:-false}
+      LAVALINK_BASE_URL: ${LAVALINK_BASE_URL:-http://lavalink:2333}
+      LAVALINK_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
+      LAVALINK_JAVA: ${LAVALINK_JAVA:-java}
+      LAVALINK_JAR_PATH: ${LAVALINK_JAR_PATH:-data/lava/Lavalink.jar}
+      LAVALINK_PID_PATH: ${LAVALINK_PID_PATH:-data/lava/lavalink.pid}
+      LAVALINK_CONFIG_PATH: ${LAVALINK_CONFIG_PATH:-}
+    volumes:
+      - ./data:/app/data
+
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    restart: unless-stopped
+    environment:
+      SERVER_ADDRESS: 0.0.0.0
+      SERVER_PORT: 2333
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
+    expose:
+      - "2333"
+    volumes:
+      - ./data/lava/application.example.yml:/opt/Lavalink/application.yml:ro
+      - ./data/sounds:/app/data/sounds:ro

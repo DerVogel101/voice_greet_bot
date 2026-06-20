@@ -19,6 +19,7 @@ class LavalinkProcessException implements Exception {
 
 class LavalinkProcessConfig {
   const LavalinkProcessConfig({
+    required this.autoStart,
     required this.javaExecutable,
     required this.jarPath,
     required this.base,
@@ -27,23 +28,23 @@ class LavalinkProcessConfig {
     this.configPath,
   });
 
-  factory LavalinkProcessConfig.fromEnvironment() {
-    final environment = Platform.environment;
+  factory LavalinkProcessConfig.fromEnvironment([
+    Map<String, String>? environment,
+  ]) {
+    final values = environment ?? Platform.environment;
 
     return LavalinkProcessConfig(
-      javaExecutable: _env(
-        environment,
-        'LAVALINK_JAVA',
-        _defaultJavaExecutable,
-      ),
-      jarPath: _env(environment, 'LAVALINK_JAR_PATH', _defaultJarPath),
-      base: Uri.parse(_env(environment, 'LAVALINK_BASE_URL', _defaultBaseUrl)),
-      password: _env(environment, 'LAVALINK_PASSWORD', _defaultPassword),
-      pidPath: _env(environment, 'LAVALINK_PID_PATH', _defaultPidPath),
-      configPath: _optionalEnv(environment, 'LAVALINK_CONFIG_PATH'),
+      autoStart: _boolEnv(values, 'LAVALINK_AUTO_START', true),
+      javaExecutable: _env(values, 'LAVALINK_JAVA', _defaultJavaExecutable),
+      jarPath: _env(values, 'LAVALINK_JAR_PATH', _defaultJarPath),
+      base: Uri.parse(_env(values, 'LAVALINK_BASE_URL', _defaultBaseUrl)),
+      password: _env(values, 'LAVALINK_PASSWORD', _defaultPassword),
+      pidPath: _env(values, 'LAVALINK_PID_PATH', _defaultPidPath),
+      configPath: _optionalEnv(values, 'LAVALINK_CONFIG_PATH'),
     );
   }
 
+  final bool autoStart;
   final String javaExecutable;
   final String jarPath;
   final Uri base;
@@ -68,6 +69,13 @@ class LavalinkProcessManager {
 
   Future<void> start() async {
     if (await _isHealthy()) {
+      if (!config.autoStart) {
+        stdout.writeln(
+          'Lavalink auto-start disabled; using external node at ${config.base}.',
+        );
+        return;
+      }
+
       _adoptedPid = await _readPidFile();
       if (_adoptedPid == null) {
         stdout.writeln(
@@ -78,6 +86,18 @@ class LavalinkProcessManager {
           'Lavalink is already reachable at ${config.base}; adopting pid $_adoptedPid.',
         );
       }
+      return;
+    }
+
+    if (!config.autoStart) {
+      stdout.writeln(
+        'Lavalink auto-start disabled; waiting for external node at ${config.base}.',
+      );
+      await _waitUntilHealthy(
+        timeoutMessage:
+            'Timed out waiting for external Lavalink at ${config.base}.',
+      );
+      stdout.writeln('External Lavalink is reachable at ${config.base}.');
       return;
     }
 
@@ -106,30 +126,21 @@ class LavalinkProcessManager {
       }),
     );
 
-    final stopwatch = Stopwatch()..start();
-    while (stopwatch.elapsed < startupTimeout) {
-      if (await _isHealthy()) {
-        stdout.writeln('Lavalink started at ${config.base}.');
-        return;
-      }
-
-      final code = exitCode;
-      if (code != null) {
-        throw LavalinkProcessException(
-          'Lavalink exited before it became reachable, exit code $code.',
-        );
-      }
-
-      await Future<void>.delayed(pollInterval);
-    }
-
-    await stop();
-    throw LavalinkProcessException(
-      'Timed out waiting for Lavalink at ${config.base}.',
+    await _waitUntilHealthy(
+      timeoutMessage: 'Timed out waiting for Lavalink at ${config.base}.',
+      exitCode: () => exitCode,
     );
+    stdout.writeln('Lavalink started at ${config.base}.');
   }
 
   Future<void> stop() async {
+    if (!config.autoStart) {
+      stdout.writeln(
+        'Lavalink auto-start disabled; leaving external node running.',
+      );
+      return;
+    }
+
     final process = _process;
     final adoptedPid = _adoptedPid;
     _process = null;
@@ -161,6 +172,30 @@ class LavalinkProcessManager {
     } on TimeoutException {
       stderr.writeln('Lavalink did not exit within 5 seconds after shutdown.');
     }
+  }
+
+  Future<void> _waitUntilHealthy({
+    required String timeoutMessage,
+    int? Function()? exitCode,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    while (stopwatch.elapsed < startupTimeout) {
+      if (await _isHealthy()) {
+        return;
+      }
+
+      final code = exitCode?.call();
+      if (code != null) {
+        throw LavalinkProcessException(
+          'Lavalink exited before it became reachable, exit code $code.',
+        );
+      }
+
+      await Future<void>.delayed(pollInterval);
+    }
+
+    await stop();
+    throw LavalinkProcessException(timeoutMessage);
   }
 
   Future<bool> _isHealthy() async {
@@ -253,6 +288,21 @@ void _pipeLines(
 String _env(Map<String, String> environment, String key, String fallback) {
   final value = environment[key]?.trim();
   return value == null || value.isEmpty ? fallback : value;
+}
+
+bool _boolEnv(Map<String, String> environment, String key, bool fallback) {
+  final value = environment[key]?.trim().toLowerCase();
+  if (value == null || value.isEmpty) {
+    return fallback;
+  }
+
+  return switch (value) {
+    'true' || '1' || 'yes' || 'on' => true,
+    'false' || '0' || 'no' || 'off' => false,
+    _ => throw LavalinkProcessException(
+      '$key must be true or false, got "$value".',
+    ),
+  };
 }
 
 String? _optionalEnv(Map<String, String> environment, String key) {

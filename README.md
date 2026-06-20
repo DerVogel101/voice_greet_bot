@@ -100,6 +100,7 @@ $env:LAVALINK_JAR_PATH = 'data/lava/Lavalink.jar'
 $env:LAVALINK_BASE_URL = 'http://127.0.0.1:2333'
 $env:LAVALINK_PASSWORD = 'youshallnotpass'
 $env:LAVALINK_PID_PATH = 'data/lava/lavalink.pid'
+$env:LAVALINK_AUTO_START = 'true'
 ```
 
 Playback waits briefly after the bot joins a voice channel before starting the
@@ -118,9 +119,8 @@ uses that pid file to stop the same JVM on shutdown or on the next run after an
 unclean IDE stop. If Lavalink was already running without that pid file, the bot
 uses it as an external node and leaves it running.
 
-For Docker later, keep these values as environment variables and mount or bake
-the Lavalink jar/config where `LAVALINK_JAR_PATH` and `LAVALINK_CONFIG_PATH`
-point.
+Set `LAVALINK_AUTO_START=false` to use an external Lavalink node. In that mode,
+the bot waits for `LAVALINK_BASE_URL` and never starts or stops a JVM.
 
 ## Slash commands
 
@@ -152,3 +152,30 @@ dart run
 
 If `DISCORD_TOKEN`, `data/servers.json`, or the Lavalink jar is missing or
 invalid, startup fails with a clear error.
+
+## Docker Compose
+
+The tracked `docker-compose.example.yml` runs the bot and Lavalink as separate
+containers. It lists every supported bot environment option with its default.
+
+Before starting Compose:
+
+1. Add your allowed guild IDs to `data/servers.json`.
+2. Put local greeting files such as `test.mp3` in `data/sounds`.
+3. Set your Discord token in the shell:
+
+```powershell
+$env:DISCORD_TOKEN = 'your-bot-token'
+```
+
+Start the stack:
+
+```powershell
+docker compose -f docker-compose.example.yml up --build
+```
+
+The compose file sets `LAVALINK_AUTO_START=false` and
+`LAVALINK_BASE_URL=http://lavalink:2333`, so the bot connects to the Lavalink
+service instead of launching `data/lava/Lavalink.jar`. Both containers mount the
+audio directory at `/app/data/sounds`, which lets local MP3 paths resolve the
+same way in the bot and in Lavalink.
