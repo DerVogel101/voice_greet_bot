@@ -6,13 +6,11 @@ COPY pubspec.yaml pubspec.lock ./
 RUN dart pub get --enforce-lockfile
 
 COPY . .
-RUN dart compile exe lib/main.dart -o /app/build/voice_greet_bot
+RUN mkdir -p /app/build \
+    && dart run nyxx_commands:compile --no-compile -o /app/build/voice_greet_bot.g.dart lib/main.dart \
+    && dart compile exe /app/build/voice_greet_bot.g.dart -o /app/build/voice_greet_bot
 
-FROM debian:bookworm-slim AS runtime
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+FROM dart:stable AS runtime
 
 WORKDIR /app
 

@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      network: host
     restart: unless-stopped
     depends_on:
       - lavalink
@@ -17,7 +18,7 @@ services:
       LAVALINK_PID_PATH: ${LAVALINK_PID_PATH:-data/lava/lavalink.pid}
       LAVALINK_CONFIG_PATH: ${LAVALINK_CONFIG_PATH:-}
     volumes:
-      - ./data:/app/data
+      - ${DATA_DIR:-./data}:/app/data
 
   lavalink:
     image: ghcr.io/lavalink-devs/lavalink:4
@@ -29,5 +30,5 @@ services:
     expose:
       - "2333"
     volumes:
-      - ./data/lava/application.example.yml:/opt/Lavalink/application.yml:ro
-      - ./data/sounds:/app/data/sounds:ro
+      - ${DATA_DIR:-./data}/lava/application.example.yml:/opt/Lavalink/application.yml:ro
+      - ${DATA_DIR:-./data}/sounds:/app/data/sounds:ro

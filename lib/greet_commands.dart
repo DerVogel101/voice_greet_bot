@@ -3,12 +3,14 @@ import 'package:nyxx_commands/nyxx_commands.dart';
 
 import 'channel_config.dart';
 import 'greeting_config.dart';
+import 'server_config.dart';
 
 const _maxMessageLength = 1800;
 
 ChatGroup buildGreetCommandGroup({
   required GreetingConfigStore store,
   required ChannelConfigStore channelStore,
+  required ServerSettingsStore settingsStore,
 }) {
   Future<void> listGreetings(InteractionChatContext context) async {
     final guildId = context.guild?.id;
@@ -164,16 +166,69 @@ ChatGroup buildGreetCommandGroup({
     }
   }
 
+  Future<void> setVolume(InteractionChatContext context, int percentage) async {
+    final guildId = context.guild?.id;
+    if (guildId == null) {
+      await _respond(context, 'Run this command in a server.');
+      return;
+    }
+
+    if (!ServerSettingsConfig.isValidVolume(percentage)) {
+      await _respond(context, 'Volume percentage must be between 0 and 100.');
+      return;
+    }
+
+    try {
+      await settingsStore.setVolume(guildId: guildId, volume: percentage);
+      await _respond(context, 'Greeting volume is now $percentage%.');
+    } on ServerConfigException catch (error) {
+      await _respond(context, error.message);
+    }
+  }
+
   return ChatGroup(
     'greet',
     'Manage voice greeting audio.',
     children: [
-      ChatCommand('list', 'List configured greeting audio.', listGreetings),
-      ChatCommand('set', 'Add or update online greeting audio.', setGreeting),
+      ChatCommand(
+        'list',
+        'List configured greeting audio.',
+        id('greet_list', (InteractionChatContext context) {
+          return listGreetings(context);
+        }),
+      ),
+      ChatCommand(
+        'set',
+        'Add or update online greeting audio.',
+        id('greet_set', (
+          InteractionChatContext context,
+          @Description('User to greet') User user,
+          @Description('Online audio URL') String url,
+        ) {
+          return setGreeting(context, user, url);
+        }),
+      ),
       ChatCommand(
         'remove',
         'Remove greeting audio for a user.',
-        removeGreeting,
+        id('greet_remove', (
+          InteractionChatContext context,
+          @Description('User to remove') User user,
+        ) {
+          return removeGreeting(context, user);
+        }),
+      ),
+      ChatCommand(
+        'volume',
+        'Set greeting playback volume.',
+        id('greet_volume', (
+          InteractionChatContext context,
+          @Description('Volume percentage from 0 to 100')
+          @UseConverter(IntConverter(min: 0, max: 100))
+          int percentage,
+        ) {
+          return setVolume(context, percentage);
+        }),
       ),
       ChatGroup(
         'channels',
@@ -182,17 +237,29 @@ ChatGroup buildGreetCommandGroup({
           ChatCommand(
             'list',
             'List ignored voice channels.',
-            listIgnoredChannels,
+            id('greet_channels_list', (InteractionChatContext context) {
+              return listIgnoredChannels(context);
+            }),
           ),
           ChatCommand(
             'ignore',
             'Ignore a voice channel for greetings.',
-            ignoreChannel,
+            id('greet_channels_ignore', (
+              InteractionChatContext context,
+              @Description('Voice channel to ignore') GuildVoiceChannel channel,
+            ) {
+              return ignoreChannel(context, channel);
+            }),
           ),
           ChatCommand(
             'allow',
             'Allow greetings in a voice channel again.',
-            allowChannel,
+            id('greet_channels_allow', (
+              InteractionChatContext context,
+              @Description('Voice channel to allow') GuildVoiceChannel channel,
+            ) {
+              return allowChannel(context, channel);
+            }),
           ),
         ],
       ),

@@ -6,6 +6,7 @@ import 'package:nyxx_lavalink/nyxx_lavalink.dart';
 
 import 'channel_config.dart';
 import 'greeting_config.dart';
+import 'server_config.dart';
 
 const defaultSoundsPath = 'data/sounds';
 const testGreetingFilename = 'test.mp3';
@@ -51,17 +52,18 @@ class GuildTaskQueue {
 
 class VoiceGreetingService {
   VoiceGreetingService({
-    required Iterable<Snowflake> allowedGuildIds,
+    required this.isGuildAllowed,
+    required this.settingsStore,
     required this.greetingStore,
     required this.channelStore,
     required this.lavalink,
     this.soundsPath = defaultSoundsPath,
     this.playbackStartDelay = defaultPlaybackStartDelay,
     GuildTaskQueue? queue,
-  }) : _allowedGuildIds = {for (final guildId in allowedGuildIds) _id(guildId)},
-       _queue = queue ?? GuildTaskQueue();
+  }) : _queue = queue ?? GuildTaskQueue();
 
-  final Set<String> _allowedGuildIds;
+  final bool Function(Snowflake guildId) isGuildAllowed;
+  final ServerSettingsStore settingsStore;
   final GreetingConfigStore greetingStore;
   final ChannelConfigStore channelStore;
   final LavalinkPlugin lavalink;
@@ -154,7 +156,7 @@ class VoiceGreetingService {
 
     if (guildId == null ||
         channelId == null ||
-        !_allowedGuildIds.contains(_id(guildId)) ||
+        !isGuildAllowed(guildId) ||
         state.userId == client.user.id ||
         event.oldState?.channelId == channelId) {
       return;
@@ -315,7 +317,9 @@ class VoiceGreetingService {
       );
 
       final track = await _loadTrack(request.audio);
-      _log('Playing "${track.info.title}" for ${request.label}.');
+      final volume = await _volumeFor(request.guildId);
+      _log('Playing "${track.info.title}" for ${request.label} at $volume%.');
+      await player.setVolume(volume);
       await player.play(track);
       await completion.future.timeout(_playbackTimeout(track));
     } on TimeoutException {
@@ -458,6 +462,17 @@ class VoiceGreetingService {
   Future<bool> _isIgnored(Snowflake guildId, Snowflake channelId) async {
     final config = await channelStore.load();
     return config.isIgnored(guildId, channelId);
+  }
+
+  Future<int> _volumeFor(Snowflake guildId) async {
+    try {
+      return await settingsStore.volumeFor(guildId);
+    } on ServerConfigException catch (error) {
+      _log(
+        '${error.message}; using default greeting volume ${ServerSettingsConfig.defaultVolume}%.',
+      );
+      return ServerSettingsConfig.defaultVolume;
+    }
   }
 
   Future<bool> _localAudioExists(GreetingAudio audio) async {

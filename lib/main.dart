@@ -15,6 +15,7 @@ import 'voice_greeting_service.dart';
 const _discordTokenVariable = 'DISCORD_TOKEN';
 const _playbackStartDelayVariable = 'VOICE_GREETING_START_DELAY_MS';
 const _serversConfigPath = 'data/servers.json';
+const _serverSettingsConfigPath = 'data/server_config.json';
 const _usersConfigPath = 'data/users.json';
 const _channelsConfigPath = 'data/channels.json';
 
@@ -26,15 +27,17 @@ Future<void> main() async {
     return;
   }
 
-  final List<Snowflake> guildIds;
+  final serverConfigStore = ServerConfigStore(_serversConfigPath);
   try {
-    guildIds = await loadGuildIdsFromFile(_serversConfigPath);
+    await serverConfigStore.loadRequired();
   } on ServerConfigException catch (error) {
     stderr.writeln(error.message);
     exitCode = 64;
     return;
   }
 
+  final guildIds = serverConfigStore.guildIds;
+  final serverSettingsStore = ServerSettingsStore(_serverSettingsConfigPath);
   final greetingConfigStore = GreetingConfigStore(_usersConfigPath);
   final channelConfigStore = ChannelConfigStore(_channelsConfigPath);
   final playbackStartDelay = _playbackStartDelayFromEnvironment();
@@ -53,7 +56,8 @@ Future<void> main() async {
     password: lavalinkConfig.password,
   );
   final voiceGreetingService = VoiceGreetingService(
-    allowedGuildIds: guildIds,
+    isGuildAllowed: serverConfigStore.allows,
+    settingsStore: serverSettingsStore,
     greetingStore: greetingConfigStore,
     channelStore: channelConfigStore,
     lavalink: lavalink,
@@ -62,11 +66,21 @@ Future<void> main() async {
 
   final commands = CommandsPlugin(prefix: null)
     ..check(GuildCheck.anyId(guildIds))
+    ..check(
+      Check(
+        (context) {
+          final guildId = context.guild?.id;
+          return guildId != null && serverConfigStore.allows(guildId);
+        },
+        name: 'Configured server check',
+        allowsDm: false,
+      ),
+    )
     ..addCommand(
       ChatCommand(
         'test',
         'Plays test.mp3 in your voice channel.',
-        (InteractionChatContext context) async {
+        id('test_greeting', (InteractionChatContext context) async {
           final guild = context.guild;
           if (guild == null) {
             await _respondTest(context, 'Run this command in a server.');
@@ -82,7 +96,7 @@ Future<void> main() async {
           } on ChannelConfigException catch (error) {
             await _respondTest(context, error.message);
           }
-        },
+        }),
         options: const CommandOptions(
           type: CommandType.slashOnly,
           defaultResponseLevel: ResponseLevel.private,
@@ -93,12 +107,17 @@ Future<void> main() async {
       buildGreetCommandGroup(
         store: greetingConfigStore,
         channelStore: channelConfigStore,
+        settingsStore: serverSettingsStore,
       ),
     );
 
   NyxxGateway? client;
   final shutdownSubscriptions = <StreamSubscription<ProcessSignal>>[];
   try {
+    await serverConfigStore.startWatching(
+      onLog: (message) => stdout.writeln('Server config: $message'),
+      onError: (error) => stderr.writeln('Server config: ${error.message}'),
+    );
     await lavalinkProcess.start();
 
     client = await Nyxx.connectGateway(
@@ -126,6 +145,7 @@ Future<void> main() async {
       await subscription.cancel();
     }
 
+    await serverConfigStore.close();
     await voiceGreetingService.close();
     await _closeClient(client);
     await lavalinkProcess.stop();

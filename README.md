@@ -6,7 +6,8 @@ leaves the voice channel after playback finishes.
 
 It also has guild-only `/greet` slash commands for managing greeting audio
 configuration in `data/users.json` and ignored voice channels in
-`data/channels.json`.
+`data/channels.json`, plus per-server playback volume in
+`data/server_config.json`.
 
 ## Discord setup
 
@@ -37,6 +38,22 @@ Add one or more guild IDs to `data/servers.json`:
 ```
 
 The file must be a non-empty JSON array of Discord guild ID strings or integers.
+
+Per-server bot settings are configured in `data/server_config.json`. This file
+is ignored by Git because it is live server data; use
+`data/server_config.example.json` as the template. The shape is:
+
+```json
+{
+  "617718300851306516": {
+    "volume": 100
+  }
+}
+```
+
+`volume` is a percentage from `0` to `100`. Missing servers default to `100`.
+Whenever the bot writes `data/server_config.json`, it uses two-space indentation
+and a trailing newline.
 
 Greeting audio is configured in `data/users.json`. This file is intentionally
 ignored by Git because it is live server data. The shape is:
@@ -89,6 +106,18 @@ also ignored by Git because it is live server data. The shape is:
 Whenever the bot writes `data/channels.json`, it uses two-space indentation and
 a trailing newline.
 
+`data/servers.json` is watched while the bot runs. Valid external edits replace
+the active allowed-server list for voice join handling and command execution.
+Invalid edits are logged and the last valid server list stays active.
+Per-server settings, greeting audio, and ignored-channel configs are read from
+disk whenever they are used, so external edits to `data/server_config.json`,
+`data/users.json`, and `data/channels.json` are picked up on the next command or
+voice event.
+
+Slash commands are registered in the guilds present in `data/servers.json` at
+startup. If you add a brand-new guild ID while the bot is already running,
+restart the bot once so Discord receives the slash commands for that guild.
+
 ## Lavalink
 
 The bot auto-starts `data/lava/Lavalink.jar` before connecting to Discord. The
@@ -130,6 +159,8 @@ the bot waits for `LAVALINK_BASE_URL` and never starts or stops a JVM.
 - `/greet set user:<user> url:<url>`: adds or updates a user's online greeting
   audio URL.
 - `/greet remove user:<user>`: removes a user's greeting audio.
+- `/greet volume percentage:<0-100>`: sets this server's greeting playback
+  volume.
 - `/greet channels list`: lists voice channels ignored for greetings.
 - `/greet channels ignore channel:<voice-channel>`: ignores a voice channel.
 - `/greet channels allow channel:<voice-channel>`: allows greetings in a voice
@@ -179,3 +210,17 @@ The compose file sets `LAVALINK_AUTO_START=false` and
 service instead of launching `data/lava/Lavalink.jar`. Both containers mount the
 audio directory at `/app/data/sounds`, which lets local MP3 paths resolve the
 same way in the bot and in Lavalink.
+
+The Docker build uses `dart run nyxx_commands:compile` before native
+compilation. Do not replace that with plain `dart compile exe lib/main.dart`;
+nyxx_commands needs generated callback metadata in compiled executables.
+
+By default Compose mounts `./data`. To keep the live data directory somewhere
+else, set `DATA_DIR` to the directory that directly contains `servers.json`,
+`server_config.json`, `users.json`, `channels.json`, `sounds`, and `lava`:
+
+```bash
+DATA_DIR=/home/dervogel/docker/greet_bot \
+DISCORD_TOKEN=your-bot-token \
+docker compose -f docker-compose.example.yml up --build
+```
