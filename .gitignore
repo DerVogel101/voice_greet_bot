@@ -11,3 +11,4 @@ data/sounds/*
 
 data/lava/*
 !data/lava/.gitkeep
+!data/lava/application.example.yml

@@ -1,7 +1,12 @@
 # Voice Greet Bot
 
-Stage one is a Discord bot with a guild-only `/test` slash command. Running
-`/test` sends `test` in the same channel.
+This is a Discord bot that plays short greeting audio when configured users join
+voice channels on allowed servers. It connects through a local Lavalink node and
+leaves the voice channel after playback finishes.
+
+It also has guild-only `/greet` slash commands for managing greeting audio
+configuration in `data/users.json` and ignored voice channels in
+`data/channels.json`.
 
 ## Discord setup
 
@@ -10,8 +15,12 @@ Invite the bot with these OAuth2 scopes:
 - `bot`
 - `applications.commands`
 
-The command is registered only in guilds listed in `data/servers.json`, so
-updates should appear quickly while testing.
+The bot needs permission to view, connect to, and speak in voice channels where
+greetings should play.
+
+All bot slash commands are registered only in guilds listed in
+`data/servers.json`, and command execution is also guarded by that same list.
+Updates should appear quickly while testing.
 
 ## Configuration
 
@@ -29,6 +38,109 @@ Add one or more guild IDs to `data/servers.json`:
 
 The file must be a non-empty JSON array of Discord guild ID strings or integers.
 
+Greeting audio is configured in `data/users.json`. This file is intentionally
+ignored by Git because it is live server data. The shape is:
+
+```json
+{
+  "617718300851306516": {
+    "543801897916694529": {
+      "file": false,
+      "resource": "https://example.com/greeting.mp3"
+    }
+  }
+}
+```
+
+Set `"file": false` for online audio URLs. Discord commands can only write
+`http` or `https` URLs.
+
+Manual local audio can still be configured by editing `data/users.json` directly:
+
+```json
+{
+  "617718300851306516": {
+    "543801897916694529": {
+      "file": true,
+      "resource": "alex_trim.mp3"
+    }
+  }
+}
+```
+
+Manual file resources must be filenames inside `data/sounds`, not paths.
+Whenever the bot writes `data/users.json`, it uses two-space indentation and a
+trailing newline. The bot resolves those filenames to absolute filesystem paths
+before handing them to Lavalink's local source.
+
+Ignored voice channels are configured in `data/channels.json`. This file is
+also ignored by Git because it is live server data. The shape is:
+
+```json
+{
+  "617718300851306516": {
+    "1386361673794715740": {
+      "ignore": true
+    }
+  }
+}
+```
+
+Whenever the bot writes `data/channels.json`, it uses two-space indentation and
+a trailing newline.
+
+## Lavalink
+
+The bot auto-starts `data/lava/Lavalink.jar` before connecting to Discord. The
+default connection settings are:
+
+```powershell
+$env:LAVALINK_JAVA = 'java'
+$env:LAVALINK_JAR_PATH = 'data/lava/Lavalink.jar'
+$env:LAVALINK_BASE_URL = 'http://127.0.0.1:2333'
+$env:LAVALINK_PASSWORD = 'youshallnotpass'
+$env:LAVALINK_PID_PATH = 'data/lava/lavalink.pid'
+```
+
+Playback waits briefly after the bot joins a voice channel before starting the
+track. The default is `500` milliseconds and can be changed with:
+
+```powershell
+$env:VOICE_GREETING_START_DELAY_MS = '750'
+```
+
+`data/lava/application.yml` is ignored by Git for local secrets. If that file is
+missing, startup uses the tracked `data/lava/application.example.yml`, which
+enables Lavalink local file playback for files in `data/sounds`.
+
+When this bot starts Lavalink itself, it writes `data/lava/lavalink.pid` and
+uses that pid file to stop the same JVM on shutdown or on the next run after an
+unclean IDE stop. If Lavalink was already running without that pid file, the bot
+uses it as an external node and leaves it running.
+
+For Docker later, keep these values as environment variables and mount or bake
+the Lavalink jar/config where `LAVALINK_JAR_PATH` and `LAVALINK_CONFIG_PATH`
+point.
+
+## Slash commands
+
+- `/test`: queues `data/sounds/test.mp3` in the voice channel you are currently
+  in, using the same playback path as join-triggered greetings.
+- `/greet list`: lists greeting audio configured for the current server.
+- `/greet set user:<user> url:<url>`: adds or updates a user's online greeting
+  audio URL.
+- `/greet remove user:<user>`: removes a user's greeting audio.
+- `/greet channels list`: lists voice channels ignored for greetings.
+- `/greet channels ignore channel:<voice-channel>`: ignores a voice channel.
+- `/greet channels allow channel:<voice-channel>`: allows greetings in a voice
+  channel again.
+
+`/greet` commands require the Manage Server permission and respond ephemerally.
+
+Join-triggered greetings and `/test` both respect ignored channels. Greetings
+are queued per server, so overlapping joins play in order instead of interrupting
+each other.
+
 ## Run
 
 From the project root:
@@ -38,5 +150,5 @@ dart pub get
 dart run
 ```
 
-If `DISCORD_TOKEN` or `data/servers.json` is missing or invalid, startup fails
-with a clear error.
+If `DISCORD_TOKEN`, `data/servers.json`, or the Lavalink jar is missing or
+invalid, startup fails with a clear error.
